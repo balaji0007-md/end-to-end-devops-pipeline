@@ -79,13 +79,13 @@ Open `http://localhost:5000/` in your browser.
 Build the image:
 
 ```bash
-docker build -t devops-demo:1.0 .
+docker build -t balaji-flask-service:1.0 .
 ```
 
 Start the container:
 
 ```bash
-docker run -d --name devops-demo -p 5000:5000 devops-demo:1.0
+docker run -d --name balaji-flask-service -p 5000:5000 balaji-flask-service:1.0
 ```
 
 Test the endpoints:
@@ -99,14 +99,14 @@ curl http://localhost:5000/info
 View container logs:
 
 ```bash
-docker logs devops-demo
+docker logs balaji-flask-service
 ```
 
 Stop and remove the container:
 
 ```bash
-docker stop devops-demo
-docker rm devops-demo
+docker stop balaji-flask-service
+docker rm balaji-flask-service
 ```
 
 ## CI Workflow
@@ -144,7 +144,7 @@ python -m unittest discover -s tests -v
 
 ```bash
 docker ps -a
-docker logs devops-demo
+docker logs balaji-flask-service
 ```
 
 **Port 5000 is already in use**
@@ -152,7 +152,7 @@ docker logs devops-demo
 Run the container on host port 5001 instead:
 
 ```bash
-docker run -d --name devops-demo -p 5001:5000 devops-demo:1.0
+docker run -d --name balaji-flask-service -p 5001:5000 balaji-flask-service:1.0
 ```
 
 Then access `http://localhost:5001/`.
@@ -185,3 +185,4 @@ Kubernetes deployment, Docker image publishing, Terraform infrastructure, and mo
 **balaji0007-md**
 
 GitHub: https://github.com/balaji0007-md
+

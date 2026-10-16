@@ -7,7 +7,7 @@ app = Flask(__name__)
 @app.get("/")
 def home():
     return jsonify({
-        "application": "DevOps CI/CD Demo",
+        "application": "Balaji's DevOps Service",
         "status": "running",
         "message": "Application deployed successfully"
     })
@@ -28,3 +28,4 @@ def info():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
