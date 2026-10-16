@@ -1,0 +1,7 @@
+services:
+  flask-service:
+    image: balajimd07/balaji-flask-service:fd6981f9656448d3744a49ead2435893cdef5bf8
+    container_name: balaji-flask-compose
+    ports:
+      - "5002:5000"
+    restart: unless-stopped
