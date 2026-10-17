@@ -1,346 +1,216 @@
-﻿# End-to-End DevOps CI/CD Pipeline with Monitoring and Alerting
+# End-to-End DevOps CI/CD Pipeline with Monitoring and Alerting
 
-An end-to-end DevOps project demonstrating automated testing, Docker image publishing, continuous deployment to an Ubuntu server, infrastructure and application monitoring, and email-based incident alerting.
+[![GitHub Actions](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-blue?logo=githubactions)](https://github.com/balaji0007-md/end-to-end-devops-pipeline/actions)
+![Docker](https://img.shields.io/badge/Container-Docker-blue?logo=docker)
+![Monitoring](https://img.shields.io/badge/Monitoring-Prometheus%20%2B%20Grafana-orange)
 
-The project uses **GitHub Actions, Docker, Docker Hub, Ubuntu Linux, Prometheus, Node Exporter, Grafana, Python, and Flask**.
+A hands-on DevOps project implementing automated testing, Docker image publishing, deployment to an Ubuntu virtual machine, application and server monitoring, and email notifications for downtime and recovery.
 
-## Project Overview
-
-This project implements a CI/CD pipeline for a containerized Python Flask application.
-
-Whenever code is pushed to the `main` branch, GitHub Actions automatically runs unit tests, builds a Docker image, publishes it to Docker Hub, and deploys the image to an Ubuntu Linux server using a self-hosted GitHub Actions runner.
-
-Prometheus collects application and server metrics, while Grafana provides visualization dashboards and alerts when the Flask application becomes unavailable.
-
-The infrastructure runs in a local VMware-based Ubuntu lab environment.
+> **Environment:** A local Ubuntu VM hosted in VMware. This is a learning lab, not an internet-facing production or cloud deployment.
 
 ## Architecture
 
+```text
 Developer (Windows / VS Code)
-           |
-           v
-      GitHub Repository
-           |
-           v
+            |
+            v
+     GitHub Repository
+            |
+            v
        GitHub Actions
-           |
-           +-- Run Python Unit Tests
-           |
-           +-- Build Docker Image
-           |
-           +-- Push Image to Docker Hub
-           |
-           v
-   Self-Hosted GitHub Runner
-           |
-           v
-       Ubuntu Server
-           |
-           v
-   Flask Application Container
-           |
-           +-- /health
-           +-- /metrics
-           |
-           v
-        Prometheus
-           |
-           +-- Flask Application Metrics
-           +-- Node Exporter Server Metrics
-           |
-           v
-         Grafana
-           |
-           +-- Monitoring Dashboards
-           +-- Application Availability Alerts
-           |
-           v
-      Gmail SMTP Alerts
+       |           |
+       |           +--> Unit tests
+       |           +--> Docker build
+       |           +--> Docker Hub push (latest + commit SHA)
+       v
+Self-hosted GitHub Actions runner (Ubuntu VM)
+            |
+            v
+  Restricted deployment script
+            |
+            v
+   Flask Docker container (:5000)
+      |                 |
+      +--> /health      +--> /metrics
+                              |
+                              v
+                         Prometheus <--- Node Exporter (Ubuntu metrics)
+                              |
+                              v
+                            Grafana
+                              |
+                    Dashboards + alert rule
+                              |
+                              v
+                      Gmail SMTP notifications
+```
 
 ## Technology Stack
 
 | Technology | Purpose |
-|---|---|
-| Python / Flask | Application development |
-| Git / GitHub | Source control |
-| GitHub Actions | CI/CD automation |
-| GitHub Self-Hosted Runner | Automated Ubuntu deployment |
-| Docker | Containerization |
-| Docker Hub | Container image registry |
-| Ubuntu Linux | Deployment environment |
-| VMware Workstation | Local virtualized infrastructure |
-| Prometheus | Metrics collection |
-| Node Exporter | Linux server monitoring |
-| Grafana | Dashboards and alerting |
+| --- | --- |
+| Python, Flask | Web service and HTTP endpoints |
+| `unittest` | Automated tests |
+| Git, GitHub | Version control and source hosting |
+| GitHub Actions | Continuous integration and deployment |
+| Self-hosted GitHub Actions runner | Runs deployment on the Ubuntu VM |
+| Docker, Docker Hub | Container runtime and image registry |
+| Ubuntu Linux, VMware | Local deployment lab |
+| Prometheus, Node Exporter | Application and host metrics |
+| Grafana | Dashboards and availability alerts |
 | Gmail SMTP | Email notifications |
 
 ## Application Endpoints
 
 | Endpoint | Purpose |
-|---|---|
+| --- | --- |
 | `/` | Application status |
-| `/health` | Application health and timestamp |
-| `/info` | Environment and version information |
-| `/metrics` | Prometheus-compatible application metrics |
+| `/health` | Health-check endpoint |
+| `/info` | Application and environment information |
+| `/metrics` | Prometheus metrics |
 
-## CI/CD Pipeline
+## CI/CD Workflow
 
-The pipeline is defined in `.github/workflows/ci-cd.yml`.
+The workflow is defined in [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml).
 
-### Continuous Integration
+1. On configured GitHub events, GitHub Actions checks out the code, installs Python dependencies, and runs three unit tests.
+2. Docker Buildx builds the container image.
+3. For pushes to `main`, the workflow publishes `balajimd07/balaji-flask-service` to Docker Hub, tagged with `latest` and the Git commit SHA.
+4. After CI succeeds, a deployment job runs on the Ubuntu self-hosted runner labeled `flask-deploy`.
+5. The runner invokes a narrowly sudo-authorized deployment script (`/usr/local/sbin/deploy-flask`) that deploys the commit-SHA image and verifies the application's `/health` endpoint.
 
-Triggered by pushes and pull requests targeting the configured branches.
+**Deployed container:** `balaji-flask-prod`  
+**Application port:** `5000`  
+**Docker Hub image:** `balajimd07/balaji-flask-service`
 
-1. Check out source code.
-2. Configure Python 3.12.
-3. Install dependencies.
-4. Execute automated unit tests.
-5. Configure Docker Buildx.
-6. Build the Docker image.
-7. Publish the image to Docker Hub on pushes to `main`.
+The deployment process replaces the running container, so it is **not zero-downtime**. A basic rollback path is intended to restore the previous image if the new deployment fails its health check; verify the current script and test results before describing rollback as fully implemented or guaranteed.
 
-Docker images are tagged using `latest` and the Git commit SHA.
+### Run the published image manually
 
-### Continuous Deployment
-
-For successful pushes to `main`:
-
-1. The CI job completes successfully.
-2. A deployment job runs on a self-hosted GitHub Actions runner.
-3. The runner executes a restricted deployment script on Ubuntu.
-4. The deployment script pulls the image tagged with the commit SHA.
-5. The previous application container is replaced.
-6. The application starts with Docker's `unless-stopped` restart policy.
-7. The deployment script checks `/health` before reporting success.
-
-**Deployment target:** Ubuntu Linux VM running on VMware Workstation.
-
-**Container:** `balaji-flask-prod`
-
-**Application port:** `5000`
-
-## Docker Hub
-
-Published image:
-
-`balajimd07/balaji-flask-service`
-
-Run the latest image manually:
-
+```bash
 docker pull balajimd07/balaji-flask-service:latest
-
-docker run -d \
-  --name balaji-flask-service \
-  -p 5000:5000 \
+docker run -d --name balaji-flask-service -p 5000:5000 \
   balajimd07/balaji-flask-service:latest
-
-Verify:
-
 curl http://localhost:5000/health
+```
 
-## Monitoring with Prometheus
+## Monitoring
 
-Prometheus is configured to scrape metrics every 15 seconds.
+The Ubuntu VM hosts a Docker Compose monitoring stack in `/opt/devops-monitoring/compose.yaml` (server-local configuration).
 
-### Monitoring Targets
+### Prometheus targets
 
-| Job | Target | Purpose |
-|---|---|---|
-| `prometheus` | `localhost:9090` | Prometheus self-monitoring |
-| `ubuntu-server` | `node-exporter:9100` | Ubuntu server metrics |
-| `flask-application` | `host.docker.internal:5000` | Flask application metrics |
+| Job | Target from Prometheus | Purpose |
+| --- | --- | --- |
+| `prometheus` | `localhost:9090` | Prometheus health and metrics |
+| `ubuntu-server` | `node-exporter:9100` | Ubuntu host metrics |
+| `flask-application` | `host.docker.internal:5000` | Flask HTTP metrics |
 
-The Flask application exposes Prometheus-compatible metrics through `/metrics`.
+All three targets were verified as **UP** in the local lab. Prometheus is accessible on port `9090` of the Ubuntu VM.
 
-Application monitoring includes HTTP request counts, response codes, and request durations.
+### Grafana dashboards
 
-Node Exporter provides Linux system metrics such as CPU, memory, disk, and network utilization.
+Grafana is accessible on port `3000` of the Ubuntu VM. Configured dashboards include:
 
-## Grafana Dashboards
-
-Two monitoring dashboards are configured.
-
-### Ubuntu Server Monitoring
-
-Uses the Node Exporter Full dashboard to visualize:
-
-- CPU utilization
-- Memory usage
-- Disk utilization
-- Network traffic
-- System uptime
-
-### Flask Application Monitoring
-
-A custom Grafana dashboard displays:
-
-- HTTP requests per second
-- HTTP error rate
-- Average HTTP response time
-- Application availability
+- **Node Exporter Full:** CPU, memory, filesystem, network, and other host metrics.
+- **Flask Application Monitoring:** HTTP request rate, HTTP error rate, average response time, and application availability.
 
 Example PromQL queries:
 
-**HTTP Requests per Second**
+**Requests per second**
 
+```promql
 sum(rate(flask_http_request_total{job="flask-application"}[5m]))
+```
 
-**HTTP Error Rate (%)**
+**HTTP error percentage**
 
+```promql
 100 *
 sum(rate(flask_http_request_total{job="flask-application",status=~"4..|5.."}[5m]))
 /
 clamp_min(sum(rate(flask_http_request_total{job="flask-application"}[5m])), 0.000001)
+```
 
-**Application Availability**
+**Application availability**
 
+```promql
 up{job="flask-application"}
+```
 
-## Grafana Alerting
+## Alerting and Incident Simulation
 
-A Grafana-managed alert rule named **Flask Application Down** monitors application availability.
+A Grafana alert rule, **Flask Application Down**, monitors `up{job="flask-application"}`. It is configured to fire when the value remains **below 1** for a **2-minute pending period**, with evaluation every **1 minute**. Notifications are sent through Gmail SMTP.
 
-PromQL:
+A controlled downtime and recovery test verified the following sequence:
 
-up{job="flask-application"}
+1. Stop the Flask container.
+2. Prometheus marks the application target down.
+3. Grafana fires the availability alert and delivers an email.
+4. Restart the Flask container.
+5. Prometheus detects recovery; Grafana resolves the alert and delivers a recovery email.
 
-The alert triggers when the metric falls below `1` for the configured pending period.
+The alert summary uses neutral wording so both **Firing** and **Resolved** notifications remain accurate.
 
-Configuration:
+## Run Locally
 
-| Setting | Value |
-|---|---|
-| Alert rule | Flask Application Down |
-| Evaluation interval | 1 minute |
-| Pending period | 2 minutes |
-| Severity | Critical |
-| Notification channel | Email |
-| SMTP provider | Gmail |
-
-### Verified Alert Lifecycle
-
-A controlled downtime test was performed:
-
-1. Stopped the Flask application container.
-2. Prometheus detected the unavailable metrics endpoint.
-3. Grafana transitioned the alert to `Firing`.
-4. A firing notification was delivered through Gmail SMTP.
-5. Restarted the Flask application container.
-6. Prometheus detected application recovery.
-7. Grafana transitioned the alert to `Normal`.
-8. A resolved notification was successfully received.
-
-Both firing and recovery notifications were verified.
-
-## Running the Application Locally
-
-Clone the repository:
-
+```bash
 git clone https://github.com/balaji0007-md/end-to-end-devops-pipeline.git
 cd end-to-end-devops-pipeline
-
-Install dependencies:
-
 python -m pip install -r app/requirements.txt
-
-Run automated tests:
-
 python -m unittest discover -s tests -v
-
-Start the Flask application:
-
 python app/app.py
+```
 
-Open:
+Open `http://localhost:5000/` or check `http://localhost:5000/health`.
 
-`http://localhost:5000`
+## Testing
 
-## Automated Testing
+The three Python unit tests cover the `/`, `/health`, and `/info` endpoints. They have been run successfully locally and as part of the GitHub Actions pipeline.
 
-The application includes three automated unit tests:
+```bash
+python -m unittest discover -s tests -v
+```
 
-- Home endpoint
-- Health endpoint
-- Application information endpoint
+## Troubleshooting (Ubuntu VM)
 
-Tests run automatically during the GitHub Actions CI workflow.
+**Application container and logs**
 
-## Security Considerations
-
-- Docker Hub credentials are stored as GitHub Actions secrets.
-- The deployment job runs only after the CI job succeeds.
-- The self-hosted runner uses a dedicated Linux account.
-- The runner is granted narrowly scoped sudo access to a deployment script.
-- Deployment uses commit-SHA image tags.
-- SMTP credentials are kept outside the Git repository.
-- Monitoring and deployment are performed in an isolated local lab environment.
-
-The current deployment replaces the running container and does not implement zero-downtime releases or automatic rollback.
-
-## Troubleshooting
-
-### Check Flask Container
-
+```bash
 sudo docker ps -a
 sudo docker logs --tail 50 balaji-flask-prod
-
-### Check Application Health
-
 curl http://localhost:5000/health
+```
 
-### Check Prometheus Targets
+**Monitoring containers**
 
-Open:
-
-`http://localhost:9090/targets`
-
-Verify that the Flask application and Ubuntu server targets show `UP`.
-
-### Check Monitoring Containers
-
+```bash
 cd /opt/devops-monitoring
 sudo docker compose ps
-
-### Check Grafana Logs
-
 sudo docker logs --tail 50 devops-grafana
+```
 
-### Check CI/CD Failures
+**Prometheus scrape health:** open `http://<ubuntu-vm-ip>:9090/targets` from a machine that can reach the VM.  
+**Pipeline failures:** review the failed job and step in the repository's [Actions tab](https://github.com/balaji0007-md/end-to-end-devops-pipeline/actions).
 
-Review the workflow execution logs under the GitHub repository's **Actions** tab.
+## Security and Scope
 
-## Project Scope and Limitations
+- Docker Hub credentials are managed using GitHub Actions secrets.
+- The self-hosted runner uses a dedicated Linux account with narrowly scoped sudo permission for the deployment script.
+- Commit-SHA tags make deployed image versions identifiable.
+- Grafana SMTP credentials are stored in a **server-local** environment file, not in Git.
+- Never commit `.env` files, `grafana-smtp.env`, SMTP app passwords, or other credentials.
+- The local lab does **not** implement Kubernetes, Terraform, AWS hosting, high availability, or zero-downtime releases.
 
-This project demonstrates a working CI/CD and observability pipeline in a local Ubuntu VM.
+**Repository vs. server configuration:** The application, Dockerfile, tests, and GitHub Actions workflow live in this repository. The deployment script, monitoring Compose configuration, Prometheus configuration, and Grafana SMTP settings are maintained locally on the Ubuntu VM unless separately added to source control in a sanitized form.
 
-It does not currently include:
+## Future Improvements
 
-- Kubernetes orchestration
-- Terraform infrastructure provisioning
-- AWS cloud deployment
-- High availability
-- Automatic deployment rollback
-- Zero-downtime deployment
-
-These are potential future enhancements.
-
-## Key Learning Outcomes
-
-- Building and containerizing a Python application
-- Creating GitHub Actions CI/CD workflows
-- Publishing Docker images to Docker Hub
-- Configuring a self-hosted deployment runner
-- Automating application deployment on Linux
-- Writing and validating deployment health checks
-- Collecting metrics using Prometheus
-- Monitoring Linux servers with Node Exporter
-- Building Grafana dashboards with PromQL
-- Configuring SMTP-based alert notifications
-- Testing application downtime and recovery scenarios
+- Version-control sanitized monitoring and deployment configuration
+- Add screenshots of GitHub Actions, Prometheus targets, Grafana dashboards, and alert notifications (with private details redacted)
+- Add Kubernetes deployment and infrastructure as code
+- Explore deployment strategies with reduced downtime and automated recovery
 
 ## Author
 
-**balaji0007-md**
-
-GitHub: https://github.com/balaji0007-md
-
+**balaji0007-md** · [GitHub](https://github.com/balaji0007-md)
