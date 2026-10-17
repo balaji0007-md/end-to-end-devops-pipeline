@@ -232,10 +232,11 @@ sudo docker logs --tail 50 devops-grafana
 
 ## Future Improvements
 
-- Version-control sanitized monitoring and deployment configuration
-- Add screenshots of GitHub Actions, Prometheus targets, Grafana dashboards, and alert notifications (with private details redacted)
-- Add Kubernetes deployment and infrastructure as code
-- Explore deployment strategies with reduced downtime and automated recovery
+- Deploy the application using Kubernetes for container orchestration.
+- Use Terraform to provision infrastructure as code.
+- Deploy the project to AWS for cloud infrastructure experience.
+- Implement automated rollback and zero-downtime deployment strategies.
+- Enhance security with container image scanning and automated vulnerability checks.
 
 ## Author
 
