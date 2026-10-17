@@ -85,6 +85,12 @@ The workflow is defined in [`.github/workflows/ci-cd.yml`](.github/workflows/ci-
 
 The deployment process replaces the running container, so it is **not zero-downtime**. A basic rollback path is intended to restore the previous image if the new deployment fails its health check; verify the current script and test results before describing rollback as fully implemented or guaranteed.
 
+### Successful CI/CD Pipeline Execution
+
+The GitHub Actions workflow successfully completes automated testing, Docker image building, and deployment to the Ubuntu server.
+
+![Successful GitHub Actions CI/CD Pipeline](screenshots/github-actions-success.png)
+
 ### Run the published image manually
 
 ```bash
@@ -107,6 +113,12 @@ The Ubuntu VM hosts a Docker Compose monitoring stack in `/opt/devops-monitoring
 | `flask-application` | `host.docker.internal:5000` | Flask HTTP metrics |
 
 All three targets were verified as **UP** in the local lab. Prometheus is accessible on port `9090` of the Ubuntu VM.
+
+### Prometheus Monitoring Targets
+
+Prometheus successfully monitors the Flask application, Ubuntu server, and Prometheus itself. All three targets were verified as UP.
+
+![Prometheus Monitoring Targets](screenshots/prometheus-targets.png)
 
 ### Grafana dashboards
 
@@ -138,6 +150,12 @@ clamp_min(sum(rate(flask_http_request_total{job="flask-application"}[5m])), 0.00
 up{job="flask-application"}
 ```
 
+### Flask Application Monitoring Dashboard
+
+The custom Grafana dashboard displays HTTP request rate, HTTP error rate, average response time, and application availability.
+
+![Grafana Flask Application Monitoring Dashboard](screenshots/grafana-flask-dashboard.png)
+
 ## Alerting and Incident Simulation
 
 A Grafana alert rule, **Flask Application Down**, monitors `up{job="flask-application"}`. It is configured to fire when the value remains **below 1** for a **2-minute pending period**, with evaluation every **1 minute**. Notifications are sent through Gmail SMTP.
@@ -151,6 +169,14 @@ A controlled downtime and recovery test verified the following sequence:
 5. Prometheus detects recovery; Grafana resolves the alert and delivers a recovery email.
 
 The alert summary uses neutral wording so both **Firing** and **Resolved** notifications remain accurate.
+
+### Grafana Application Downtime Alert
+
+Grafana detects Flask application downtime using Prometheus metrics and sends an email notification when the alert enters the FIRING state.
+
+The following screenshot shows the alert notification received during a controlled application downtime test.
+
+![Grafana Application Downtime Alert](screenshots/grafana-alert-firing.png)
 
 ## Run Locally
 
