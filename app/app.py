@@ -1,8 +1,10 @@
 ﻿from flask import Flask, jsonify
 from datetime import datetime, timezone
+from prometheus_flask_exporter import PrometheusMetrics
 import os
 
 app = Flask(__name__)
+metrics = PrometheusMetrics(app)
 
 @app.get("/")
 def home():
