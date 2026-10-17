@@ -45,3 +45,18 @@ jobs:
           tags: |
             balajimd07/balaji-flask-service:latest
             balajimd07/balaji-flask-service:${{ github.sha }}
+
+  deploy:
+    name: Deploy to Ubuntu Server
+    needs: test-and-build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64, flask-deploy]
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Deploy Docker image
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: sudo -n /usr/local/sbin/deploy-flask "$IMAGE_TAG"
