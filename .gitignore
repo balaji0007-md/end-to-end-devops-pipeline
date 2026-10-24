@@ -1,7 +1,21 @@
-﻿__pycache__/
+﻿
+__pycache__/
 *.py[cod]
 .venv/
 venv/
 .env
 .pytest_cache/
 grafana-smtp.env
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+**/tfplan
+crash.log
+crash.*.log
+
+# Local AWS OIDC configuration
+terraform/github-oidc-trust.json

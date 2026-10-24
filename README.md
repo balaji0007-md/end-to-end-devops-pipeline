@@ -1,64 +1,80 @@
-# End-to-End DevOps CI/CD Pipeline with Monitoring and Alerting
+# End-to-End DevOps CI/CD Pipeline | AWS, Terraform & Monitoring
 
 [![GitHub Actions](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-blue?logo=githubactions)](https://github.com/balaji0007-md/end-to-end-devops-pipeline/actions)
-![Docker](https://img.shields.io/badge/Container-Docker-blue?logo=docker)
+![Docker](https://img.shields.io/badge/Containers-Docker-blue?logo=docker)
+![AWS](https://img.shields.io/badge/Cloud-AWS-FF9900?logo=amazonwebservices)
+![Terraform](https://img.shields.io/badge/IaC-Terraform-844FBA?logo=terraform)
 ![Monitoring](https://img.shields.io/badge/Monitoring-Prometheus%20%2B%20Grafana-orange)
 
-A hands-on DevOps project implementing automated testing, Docker image publishing, deployment to an Ubuntu virtual machine, application and server monitoring, and email notifications for downtime and recovery.
+A hands-on DevOps engineering project that automates testing, container image publishing, and deployment of a Python Flask application. It combines a GitHub Actions CI/CD pipeline with Linux-based deployment, application and host monitoring, alerting, and reproducible AWS infrastructure provisioned using Terraform.
 
-> **Environment:** A local Ubuntu VM hosted in VMware. This is a learning lab, not an internet-facing production or cloud deployment.
+**Deployment scope:** Continuous deployment runs on a **local Ubuntu virtual machine** through a self-hosted GitHub Actions runner. An **AWS EC2 deployment was separately provisioned, deployed, and validated** using Terraform and EC2 user data. The temporary AWS lab resources were subsequently destroyed to control costs. Automated GitHub Actions deployment to AWS is **not implemented yet**.
 
 ## Architecture
 
 ```text
-Developer (Windows / VS Code)
-            |
-            v
-     GitHub Repository
-            |
-            v
-       GitHub Actions
-       |           |
-       |           +--> Unit tests
-       |           +--> Docker build
-       |           +--> Docker Hub push (latest + commit SHA)
-       v
-Self-hosted GitHub Actions runner (Ubuntu VM)
-            |
-            v
-  Restricted deployment script
-            |
-            v
-   Flask Docker container (:5000)
-      |                 |
-      +--> /health      +--> /metrics
-                              |
-                              v
-                         Prometheus <--- Node Exporter (Ubuntu metrics)
-                              |
-                              v
-                            Grafana
-                              |
-                    Dashboards + alert rule
-                              |
-                              v
-                      Gmail SMTP notifications
+Developer / VS Code
+        |
+        v
+  GitHub repository
+        |
+        v
+    GitHub Actions (CI)
+        |-- Python unit tests
+        |-- Docker Buildx image build
+        |-- Docker Hub push (latest + commit SHA on main)
+        |
+        v
+ Self-hosted Ubuntu runner (CD on main)
+        |
+        v
+ Restricted deployment script
+        |
+        v
+ Flask container on local Ubuntu VM (:5000)
+        |                       |
+        |                       +--> /health, /metrics
+        |                                  |
+        |                              Prometheus <--- Node Exporter
+        |                                  |
+        |                               Grafana
+        |                                  |
+        |                           Gmail alerts
+        |
+        +----------------------------------------------+
+                                                       |
+ AWS deployment track (separate, validated lab)        |
+                                                       |
+ Terraform --> VPC/subnet lookup --> security group    |
+        |                                              |
+        +--> EC2 (Ubuntu 24.04) + encrypted EBS         |
+                 |                                     |
+                 +--> IAM instance profile + SSM       |
+                 +--> user data: install Docker        |
+                 +--> Docker Hub image                 |
+                 +--> Flask container (:5000) ---------+
+                            |
+                         /health
 ```
+
+The local CI/CD and monitoring stack and the AWS Terraform deployment are **separate implementations**. The AWS deployment currently bootstraps the published Docker image; GitHub Actions does not yet deploy updates directly to EC2.
 
 ## Technology Stack
 
 | Technology | Purpose |
 | --- | --- |
-| Python, Flask | Web service and HTTP endpoints |
-| `unittest` | Automated tests |
-| Git, GitHub | Version control and source hosting |
-| GitHub Actions | Continuous integration and deployment |
-| Self-hosted GitHub Actions runner | Runs deployment on the Ubuntu VM |
-| Docker, Docker Hub | Container runtime and image registry |
-| Ubuntu Linux, VMware | Local deployment lab |
+| Python, Flask | Application and HTTP endpoints |
+| Python `unittest` | Automated application tests |
+| Git, GitHub | Source control and repository hosting |
+| GitHub Actions | CI and local-VM continuous deployment |
+| Self-hosted GitHub Actions runner | Runs local Ubuntu deployment job |
+| Docker, Docker Hub | Containerization and image publishing |
+| Linux, Bash, VMware | Local deployment environment and automation |
 | Prometheus, Node Exporter | Application and host metrics |
-| Grafana | Dashboards and availability alerts |
-| Gmail SMTP | Email notifications |
+| Grafana, Gmail SMTP | Dashboards, availability alerts and notifications |
+| AWS EC2, IAM, Systems Manager | Cloud compute and secure remote administration |
+| Terraform | Infrastructure as Code for AWS resources |
+| AWS cloud-init / EC2 user data | Automated Docker installation and application startup |
 
 ## Application Endpoints
 
@@ -69,29 +85,28 @@ Self-hosted GitHub Actions runner (Ubuntu VM)
 | `/info` | Application and environment information |
 | `/metrics` | Prometheus metrics |
 
-## CI/CD Workflow
+## CI/CD: GitHub Actions to Ubuntu VM
 
 The workflow is defined in [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml).
 
-1. On configured GitHub events, GitHub Actions checks out the code, installs Python dependencies, and runs three unit tests.
-2. Docker Buildx builds the container image.
-3. For pushes to `main`, the workflow publishes `balajimd07/balaji-flask-service` to Docker Hub, tagged with `latest` and the Git commit SHA.
-4. After CI succeeds, a deployment job runs on the Ubuntu self-hosted runner labeled `flask-deploy`.
-5. The runner invokes a narrowly sudo-authorized deployment script (`/usr/local/sbin/deploy-flask`) that deploys the commit-SHA image and verifies the application's `/health` endpoint.
+1. Pushes and pull requests to `main` or `master` trigger the test-and-build job on a GitHub-hosted Ubuntu runner.
+2. GitHub Actions installs Python dependencies and runs the application unit tests.
+3. Docker Buildx builds the container image.
+4. **On pushes to `main`**, the workflow publishes `balajimd07/balaji-flask-service` to Docker Hub with `latest` and commit-SHA tags.
+5. After CI passes on `main`, the deployment job runs on a self-hosted Ubuntu runner labeled `flask-deploy`.
+6. The runner invokes `/usr/local/sbin/deploy-flask` with the commit SHA to update the local Flask container.
 
-**Deployed container:** `balaji-flask-prod`  
-**Application port:** `5000`  
-**Docker Hub image:** `balajimd07/balaji-flask-service`
+**Image:** `balajimd07/balaji-flask-service`
+**Local deployment container:** `balaji-flask-prod`
+**Application port:** `5000`
 
-The deployment process replaces the running container, so it is **not zero-downtime**. A basic rollback path is intended to restore the previous image if the new deployment fails its health check; verify the current script and test results before describing rollback as fully implemented or guaranteed.
+This deployment replaces a running container; it is **not a zero-downtime deployment**. The current deployment script is server-local and is not included in this repository.
 
-### Successful CI/CD Pipeline Execution
+### Successful GitHub Actions Pipeline
 
-The GitHub Actions workflow successfully completes automated testing, Docker image building, and deployment to the Ubuntu server.
+![Successful GitHub Actions CI/CD pipeline](screenshots/github-actions-success.png)
 
-![Successful GitHub Actions CI/CD Pipeline](screenshots/github-actions-success.png)
-
-### Run the published image manually
+### Run the Published Image
 
 ```bash
 docker pull balajimd07/balaji-flask-service:latest
@@ -100,32 +115,150 @@ docker run -d --name balaji-flask-service -p 5000:5000 \
 curl http://localhost:5000/health
 ```
 
-## Monitoring
+## AWS Infrastructure with Terraform
 
-The Ubuntu VM hosts a Docker Compose monitoring stack in `/opt/devops-monitoring/compose.yaml` (server-local configuration).
+Terraform configuration is stored in [`terraform/`](terraform/).
 
-### Prometheus targets
+### Infrastructure Provisioned
+
+- **EC2:** Ubuntu Server 24.04 LTS on a configurable instance type (tested with `t3.micro`).
+- **Networking:** Uses the default VPC and a subnet in the selected AWS region.
+- **Security group:** Allows TCP port `5000` only from the configured trusted IPv4 CIDR; SSH ingress is disabled by default.
+- **Storage:** Encrypted `gp3` root EBS volume (8 GiB by default).
+- **IAM:** EC2 role and instance profile with `AmazonSSMManagedInstanceCore`.
+- **Metadata:** IMDSv2 required for the instance.
+- **Bootstrap:** EC2 user data installs Docker, enables its service, pulls the published image and starts the Flask container.
+- **Operations:** AWS Systems Manager Session Manager provides administrative access without opening SSH port `22`.
+
+### Terraform Files
+
+| File | Purpose |
+| --- | --- |
+| [`main.tf`](terraform/main.tf) | VPC/subnet/AMI lookups, security group, EC2, IAM and instance profile |
+| [`variables.tf`](terraform/variables.tf) | Configurable region, instance size, volume size, project name and access CIDRs |
+| [`versions.tf`](terraform/versions.tf) | Terraform and AWS provider configuration |
+| [`outputs.tf`](terraform/outputs.tf) | EC2 instance ID, public IP and Flask health-check URL |
+| [`user-data.sh`](terraform/user-data.sh) | Automated host setup and Docker deployment |
+| [`.terraform.lock.hcl`](terraform/.terraform.lock.hcl) | AWS provider dependency lock file |
+
+### Deploy to AWS
+
+**Prerequisites:** Terraform, AWS CLI, an authenticated AWS profile with appropriate permissions, and access to the selected AWS region. AWS resources may incur charges. This project uses the default VPC, which must exist in the chosen region.
+
+1. Clone the repository and enter the Terraform directory:
+
+   ```bash
+   git clone https://github.com/balaji0007-md/end-to-end-devops-pipeline.git
+   cd end-to-end-devops-pipeline/terraform
+   ```
+
+2. Create a local `terraform.tfvars` file (excluded from Git):
+
+   ```hcl
+   aws_region         = "ap-south-1"
+   instance_type      = "t3.micro"
+   root_volume_size   = 8
+   allowed_ssh_cidr   = null
+   allowed_flask_cidr = "YOUR_PUBLIC_IPV4/32"
+   ```
+
+   Replace `YOUR_PUBLIC_IPV4/32` with your own public IPv4 address in CIDR notation. Do not set `0.0.0.0/0` for a public lab unless access is deliberately intended and adequately protected.
+
+3. Initialize, format, validate and review the infrastructure plan:
+
+   ```bash
+   terraform init
+   terraform fmt -check
+   terraform validate
+   terraform plan -out=tfplan
+   ```
+
+4. After reviewing the plan, provision the resources:
+
+   ```bash
+   terraform apply tfplan
+   terraform output
+   ```
+
+5. After EC2 user-data execution finishes, validate the application through the printed `flask_url`. The endpoint uses **HTTP, not HTTPS**, and is intended only for a restricted, short-lived lab.
+
+6. When testing is complete, remove the temporary infrastructure:
+
+   ```bash
+   terraform plan -destroy
+   terraform destroy
+   terraform state list
+   ```
+
+   Review the destroy plan before confirming. `terraform state list` should be empty after a successful teardown. AWS billing information may take time to reflect resource removal.
+
+### AWS Deployment Validation
+
+The application was successfully deployed to EC2 and validated with:
+
+- Successful cloud-init execution without errors.
+- Active Docker service and a healthy running Flask container.
+- HTTP `200 OK` from `/health` locally on the instance.
+- HTTP `200 OK` from the browser-accessible EC2 health endpoint, restricted to the trusted client IP.
+- An online EC2 managed node in AWS Systems Manager.
+- Successful Terraform destruction of the seven resources created for the lab.
+
+![AWS EC2 Flask application health check](screenshots/aws-ec2-flask-health.png)
+
+### Secure EC2 Access with Systems Manager
+
+Once the instance has registered with Systems Manager, a session can be started using its ID:
+
+```bash
+aws ssm start-session --target INSTANCE_ID --region ap-south-1 --profile YOUR_AWS_PROFILE
+```
+
+Useful checks inside the Ubuntu instance:
+
+```bash
+cloud-init status --long
+sudo systemctl is-active docker
+sudo docker ps
+sudo docker logs --tail 50 balaji-flask-prod
+curl -i http://localhost:5000/health
+```
+
+### AWS Troubleshooting: EC2 User-data Execution
+
+During initial deployment testing, cloud-init reported an `Exec format error` because the shell script had a blank line before the `#!/bin/bash` shebang. The script was corrected so the shebang was the first bytes of the file, saved with Unix line endings, and the EC2 instance was replaced using Terraform. The subsequent deployment completed successfully.
+
+Useful diagnostic commands:
+
+```bash
+cloud-init status --long
+sudo tail -100 /var/log/cloud-init-output.log
+sudo head -1 /var/lib/cloud/instance/scripts/part-001 | od -An -tx1
+```
+
+This illustrates the importance of validating startup scripts and inspecting cloud-init logs when automated instance bootstrapping fails.
+
+## Monitoring and Observability (Local Ubuntu VM)
+
+The local Ubuntu VM hosts a Docker Compose monitoring stack under `/opt/devops-monitoring/compose.yaml`. This configuration is maintained on the VM and is not currently tracked in this repository. **Prometheus and Grafana were configured for the local VM, not deployed to the AWS EC2 instance.**
+
+### Prometheus Targets
 
 | Job | Target from Prometheus | Purpose |
 | --- | --- | --- |
-| `prometheus` | `localhost:9090` | Prometheus health and metrics |
-| `ubuntu-server` | `node-exporter:9100` | Ubuntu host metrics |
-| `flask-application` | `host.docker.internal:5000` | Flask HTTP metrics |
+| `prometheus` | `localhost:9090` | Prometheus metrics |
+| `ubuntu-server` | `node-exporter:9100` | Host CPU, memory, network and filesystem metrics |
+| `flask-application` | `host.docker.internal:5000` | Flask application metrics |
 
-All three targets were verified as **UP** in the local lab. Prometheus is accessible on port `9090` of the Ubuntu VM.
+All three targets were verified as **UP** in the local lab.
 
-### Prometheus Monitoring Targets
+![Prometheus monitoring targets](screenshots/prometheus-targets.png)
 
-Prometheus successfully monitors the Flask application, Ubuntu server, and Prometheus itself. All three targets were verified as UP.
+### Grafana Dashboards
 
-![Prometheus Monitoring Targets](screenshots/prometheus-targets.png)
+Grafana runs on port `3000` of the Ubuntu VM. Configured dashboards include:
 
-### Grafana dashboards
-
-Grafana is accessible on port `3000` of the Ubuntu VM. Configured dashboards include:
-
-- **Node Exporter Full:** CPU, memory, filesystem, network, and other host metrics.
-- **Flask Application Monitoring:** HTTP request rate, HTTP error rate, average response time, and application availability.
+- **Node Exporter Full:** CPU, memory, disk and network metrics.
+- **Flask Application Monitoring:** request rate, HTTP error rate, response time and service availability.
 
 Example PromQL queries:
 
@@ -150,35 +283,17 @@ clamp_min(sum(rate(flask_http_request_total{job="flask-application"}[5m])), 0.00
 up{job="flask-application"}
 ```
 
-### Flask Application Monitoring Dashboard
+![Grafana Flask monitoring dashboard](screenshots/grafana-flask-dashboard.png)
 
-The custom Grafana dashboard displays HTTP request rate, HTTP error rate, average response time, and application availability.
+### Alerting and Incident Simulation
 
-![Grafana Flask Application Monitoring Dashboard](screenshots/grafana-flask-dashboard.png)
+The **Flask Application Down** Grafana alert evaluates `up{job="flask-application"}` every minute and fires when availability remains below `1` for two minutes. Gmail SMTP sends downtime and recovery notifications.
 
-## Alerting and Incident Simulation
+The alert was validated through a controlled test: stopping the Flask container triggered a firing notification; restarting it restored the Prometheus target and generated a resolved notification.
 
-A Grafana alert rule, **Flask Application Down**, monitors `up{job="flask-application"}`. It is configured to fire when the value remains **below 1** for a **2-minute pending period**, with evaluation every **1 minute**. Notifications are sent through Gmail SMTP.
+![Grafana application downtime alert](screenshots/grafana-alert-firing.png)
 
-A controlled downtime and recovery test verified the following sequence:
-
-1. Stop the Flask container.
-2. Prometheus marks the application target down.
-3. Grafana fires the availability alert and delivers an email.
-4. Restart the Flask container.
-5. Prometheus detects recovery; Grafana resolves the alert and delivers a recovery email.
-
-The alert summary uses neutral wording so both **Firing** and **Resolved** notifications remain accurate.
-
-### Grafana Application Downtime Alert
-
-Grafana detects Flask application downtime using Prometheus metrics and sends an email notification when the alert enters the FIRING state.
-
-The following screenshot shows the alert notification received during a controlled application downtime test.
-
-![Grafana Application Downtime Alert](screenshots/grafana-alert-firing.png)
-
-## Run Locally
+## Run and Test Locally
 
 ```bash
 git clone https://github.com/balaji0007-md/end-to-end-devops-pipeline.git
@@ -188,19 +303,13 @@ python -m unittest discover -s tests -v
 python app/app.py
 ```
 
-Open `http://localhost:5000/` or check `http://localhost:5000/health`.
+Open `http://localhost:5000/` or query `http://localhost:5000/health`.
 
-## Testing
+The automated tests cover the `/`, `/health`, and `/info` endpoints.
 
-The three Python unit tests cover the `/`, `/health`, and `/info` endpoints. They have been run successfully locally and as part of the GitHub Actions pipeline.
+## Operational Troubleshooting
 
-```bash
-python -m unittest discover -s tests -v
-```
-
-## Troubleshooting (Ubuntu VM)
-
-**Application container and logs**
+**Flask container and application logs**
 
 ```bash
 sudo docker ps -a
@@ -208,7 +317,7 @@ sudo docker logs --tail 50 balaji-flask-prod
 curl http://localhost:5000/health
 ```
 
-**Monitoring containers**
+**Monitoring containers (local VM)**
 
 ```bash
 cd /opt/devops-monitoring
@@ -216,27 +325,28 @@ sudo docker compose ps
 sudo docker logs --tail 50 devops-grafana
 ```
 
-**Prometheus scrape health:** open `http://<ubuntu-vm-ip>:9090/targets` from a machine that can reach the VM.  
-**Pipeline failures:** review the failed job and step in the repository's [Actions tab](https://github.com/balaji0007-md/end-to-end-devops-pipeline/actions).
+**Prometheus scrape health:** Open `http://<ubuntu-vm-ip>:9090/targets` from a machine with network access to the VM.
+**CI/CD failures:** Inspect the relevant job and step in [GitHub Actions](https://github.com/balaji0007-md/end-to-end-devops-pipeline/actions).
 
-## Security and Scope
+## Security and Project Scope
 
-- Docker Hub credentials are managed using GitHub Actions secrets.
-- The self-hosted runner uses a dedicated Linux account with narrowly scoped sudo permission for the deployment script.
-- Commit-SHA tags make deployed image versions identifiable.
-- Grafana SMTP credentials are stored in a **server-local** environment file, not in Git.
-- Never commit `.env` files, `grafana-smtp.env`, SMTP app passwords, or other credentials.
-- The local lab does **not** implement Kubernetes, Terraform, AWS hosting, high availability, or zero-downtime releases.
+- Docker Hub login uses GitHub Actions secrets; no registry credentials are stored in the workflow.
+- The local deployment runner uses a dedicated Linux account and a restricted sudo-authorized deployment command.
+- Application Docker images are tagged with a Git commit SHA for traceability.
+- SMTP credentials remain in a server-local environment file, excluded from Git.
+- Terraform state, saved plans, `.tfvars` files, `.env` files and provider cache directories are excluded via `.gitignore`.
+- The AWS EC2 instance requires IMDSv2, uses an encrypted root volume, and supports Systems Manager access without inbound SSH.
+- The AWS application endpoint was exposed over HTTP on port `5000`, restricted to a trusted client IP. It is a lab demonstration, **not a hardened production deployment**.
+- AWS infrastructure was destroyed after successful testing. Screenshots document the successful deployment, not a currently running service.
+- The OIDC-based GitHub Actions-to-AWS deployment integration is in progress; it is **not part of the current deployed pipeline**.
 
-**Repository vs. server configuration:** The application, Dockerfile, tests, and GitHub Actions workflow live in this repository. The deployment script, monitoring Compose configuration, Prometheus configuration, and Grafana SMTP settings are maintained locally on the Ubuntu VM unless separately added to source control in a sanitized form.
+## Planned Enhancements
 
-## Future Improvements
-
-- Deploy the application using Kubernetes for container orchestration.
-- Use Terraform to provision infrastructure as code.
-- Deploy the project to AWS for cloud infrastructure experience.
-- Implement automated rollback and zero-downtime deployment strategies.
-- Enhance security with container image scanning and automated vulnerability checks.
+- Authenticate GitHub Actions to AWS using OpenID Connect and a least-privilege IAM role.
+- Implement a separately triggered AWS deployment workflow using Systems Manager.
+- Add a Kubernetes deployment on a suitable local cluster.
+- Improve deployment reliability with automated rollback and zero-downtime deployment techniques.
+- Add container image vulnerability scanning and configuration security checks.
 
 ## Author
 
