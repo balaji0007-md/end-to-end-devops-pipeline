@@ -8,7 +8,7 @@
 
 A hands-on DevOps engineering project that automates testing, container image publishing, and deployment of a Python Flask application. It combines a GitHub Actions CI/CD pipeline with Linux-based deployment, application and host monitoring, alerting, and reproducible AWS infrastructure provisioned using Terraform.
 
-**Deployment scope:** Continuous deployment runs on a **local Ubuntu virtual machine** through a self-hosted GitHub Actions runner. An **AWS EC2 deployment was separately provisioned, deployed, and validated** using Terraform and EC2 user data. The temporary AWS lab resources were subsequently destroyed to control costs. Automated GitHub Actions deployment to AWS is **not implemented yet**.
+**Deployment environments:** GitHub Actions automates testing, image publishing, and deployment to an Ubuntu VM through a self-hosted runner. Separately, Terraform provisions AWS EC2 infrastructure and EC2 user data bootstraps the published Docker image. The AWS deployment was verified through HTTP health checks and AWS Systems Manager, then the lab resources were removed using Terraform.
 
 ## Architecture
 
@@ -43,7 +43,7 @@ Developer / VS Code
         |
         +----------------------------------------------+
                                                        |
- AWS deployment track (separate, validated lab)        |
+ AWS deployment (Terraform-managed EC2 lab)        |
                                                        |
  Terraform --> VPC/subnet lookup --> security group    |
         |                                              |
@@ -57,7 +57,7 @@ Developer / VS Code
                          /health
 ```
 
-The local CI/CD and monitoring stack and the AWS Terraform deployment are **separate implementations**. The AWS deployment currently bootstraps the published Docker image; GitHub Actions does not yet deploy updates directly to EC2.
+The GitHub Actions pipeline deploys to the Ubuntu VM, while Terraform and EC2 user data automate the AWS infrastructure and application bootstrap. Prometheus and Grafana monitor the Ubuntu VM deployment.
 
 ## Technology Stack
 
@@ -100,7 +100,7 @@ The workflow is defined in [`.github/workflows/ci-cd.yml`](.github/workflows/ci-
 **Local deployment container:** `balaji-flask-prod`
 **Application port:** `5000`
 
-This deployment replaces a running container; it is **not a zero-downtime deployment**. The current deployment script is server-local and is not included in this repository.
+The deployment script runs on the Ubuntu VM and updates the running Flask container using the commit-tagged image.
 
 ### Successful GitHub Actions Pipeline
 
@@ -239,7 +239,7 @@ This illustrates the importance of validating startup scripts and inspecting clo
 
 ## Monitoring and Observability (Local Ubuntu VM)
 
-The local Ubuntu VM hosts a Docker Compose monitoring stack under `/opt/devops-monitoring/compose.yaml`. This configuration is maintained on the VM and is not currently tracked in this repository. **Prometheus and Grafana were configured for the local VM, not deployed to the AWS EC2 instance.**
+The Ubuntu VM hosts a Docker Compose monitoring stack under `/opt/devops-monitoring/compose.yaml`. Prometheus scrapes metrics from the Flask container and Node Exporter, and Grafana provides dashboards and alerting for the Ubuntu deployment.
 
 ### Prometheus Targets
 
@@ -328,7 +328,7 @@ sudo docker logs --tail 50 devops-grafana
 **Prometheus scrape health:** Open `http://<ubuntu-vm-ip>:9090/targets` from a machine with network access to the VM.
 **CI/CD failures:** Inspect the relevant job and step in [GitHub Actions](https://github.com/balaji0007-md/end-to-end-devops-pipeline/actions).
 
-## Security and Project Scope
+## Security and Operations
 
 - Docker Hub login uses GitHub Actions secrets; no registry credentials are stored in the workflow.
 - The local deployment runner uses a dedicated Linux account and a restricted sudo-authorized deployment command.
@@ -336,17 +336,8 @@ sudo docker logs --tail 50 devops-grafana
 - SMTP credentials remain in a server-local environment file, excluded from Git.
 - Terraform state, saved plans, `.tfvars` files, `.env` files and provider cache directories are excluded via `.gitignore`.
 - The AWS EC2 instance requires IMDSv2, uses an encrypted root volume, and supports Systems Manager access without inbound SSH.
-- The AWS application endpoint was exposed over HTTP on port `5000`, restricted to a trusted client IP. It is a lab demonstration, **not a hardened production deployment**.
-- AWS infrastructure was destroyed after successful testing. Screenshots document the successful deployment, not a currently running service.
-- The OIDC-based GitHub Actions-to-AWS deployment integration is in progress; it is **not part of the current deployed pipeline**.
-
-## Planned Enhancements
-
-- Authenticate GitHub Actions to AWS using OpenID Connect and a least-privilege IAM role.
-- Implement a separately triggered AWS deployment workflow using Systems Manager.
-- Add a Kubernetes deployment on a suitable local cluster.
-- Improve deployment reliability with automated rollback and zero-downtime deployment techniques.
-- Add container image vulnerability scanning and configuration security checks.
+- The AWS application endpoint used HTTP on port `5000` with access restricted to a trusted client IP for deployment validation.
+- After successful testing, Terraform removed the temporary AWS resources. The deployment screenshot records the verified health-check response.
 
 ## Author
 
